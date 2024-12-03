@@ -1,0 +1,18 @@
+# Node / NPM
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Environment files – keep .env.example public, ignore actual secrets
+.env
+.env.*
+!.env.example
+
+# IDE & tooling directories
+.vscode/
+.idea/
+.n8n/

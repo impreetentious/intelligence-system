@@ -1,0 +1,1085 @@
+{
+  "name": "Weekly Synthesis — Intelligence System",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 16 * * 0"
+            }
+          ]
+        }
+      },
+      "id": "0a0dfbc4-2d01-49e2-bf25-03e9807bb09f",
+      "name": "Schedule Trigger (Weekly)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "weekly-synthesis",
+        "responseMode": "onReceived",
+        "responseData": "allEntries",
+        "options": {}
+      },
+      "id": "b3949768-42f9-4756-aa97-2f353e001ecb",
+      "name": "Webhook Trigger (Weekly)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        220,
+        480
+      ],
+      "webhookId": "weekly-synthesis"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": {
+          "__rl": true,
+          "value": "={{ $env.DAILY_BRIEFS_DB_ID }}",
+          "mode": "id"
+        },
+        "returnAll": true,
+        "filterType": "expression",
+        "filterJson": "={{ JSON.stringify({and:[{property:\"Status\",select:{equals:\"Generated\"}},{property:\"Generated At\",date:{on_or_after:DateTime.now().minus({days:7}).toISO()}}]}) }}",
+        "options": {}
+      },
+      "id": "ca56c94b-b075-44e3-a222-4cef8a3de9af",
+      "name": "Read Daily Briefs",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [
+        480,
+        390
+      ],
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_NOTION_CRED_ID",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "page_id",
+              "value": "={{ $json.id }}"
+            },
+            {
+              "name": "brief_date",
+              "value": "={{ $json.properties.Date.title[0].plain_text }}"
+            }
+          ]
+        },
+        "options": {
+          "keepAllFields": false
+        }
+      },
+      "id": "290d79b0-05a2-4283-bd91-1dad4c40258c",
+      "name": "Tag Brief Page",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        720,
+        390
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://api.notion.com/v1/blocks/' + $json.page_id + '/children?page_size=100' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "notionApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2022-06-28"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "9af2d9a0-2e4b-4a0c-abf3-65cfb6c67ef1",
+      "name": "Get Block Children",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        390
+      ],
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_NOTION_CRED_ID",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst results = d.results || [];\nconst brief_date = $('Tag Brief Page').item.json.brief_date || '';\nconst page_id    = $('Tag Brief Page').item.json.page_id || '';\n\nconst parts = [];\nfor (const block of results) {\n  const type = block.type;\n  if (!type) continue;\n  const rt = block[type]?.rich_text || [];\n  const text = rt.map(r => r.plain_text || '').join('');\n  if (!text.trim()) continue;\n  if (type === 'heading_2') parts.push('## ' + text);\n  else if (type === 'heading_3') parts.push('### ' + text);\n  else if (type === 'bulleted_list_item') parts.push('- ' + text);\n  else parts.push(text);\n}\n\nreturn [{ json: { page_id, brief_date, brief_text: parts.join('\\n') } }];"
+      },
+      "id": "cb32cbec-7d61-4742-ac96-b91a04eebe3b",
+      "name": "Extract Brief Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        390
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nconst briefs = items\n  .map(item => {\n    const { brief_date, brief_text } = item.json;\n    return brief_text ? '=== ' + brief_date + ' ===\\n' + brief_text : null;\n  })\n  .filter(Boolean);\n\nreturn [{ json: {\n  all_briefs_text: briefs.join('\\n\\n'),\n  brief_count: briefs.length\n} }];"
+      },
+      "id": "9274bb0c-b98c-47e6-babc-e926666a8b1e",
+      "name": "Aggregate All Briefs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        390
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": {
+          "__rl": true,
+          "value": "={{ $env.SOURCES_DB_ID }}",
+          "mode": "id"
+        },
+        "returnAll": true,
+        "filterType": "expression",
+        "filterJson": "={{ JSON.stringify({and:[{property:\"Active\",checkbox:{equals:true}},{property:\"Cadence\",select:{equals:\"Weekly\"}}]}) }}",
+        "options": {}
+      },
+      "id": "72b17785-b7b7-4ce3-ab96-8d81b450cd10",
+      "name": "Read Weekly Sources",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [
+        1700,
+        390
+      ],
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_NOTION_CRED_ID",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "id": "24279175-1ab6-4613-876c-ec2b89867547",
+                    "leftValue": "={{ $json.properties.Type.select.name }}",
+                    "rightValue": "Newsletter",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Newsletter"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "id": "ac3ad317-b5de-4dac-ba8d-c09ac19b5b45",
+                    "leftValue": "={{ $json.properties.Type.select.name }}",
+                    "rightValue": "News",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "News"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "id": "85b9b976-8216-4224-8ef8-be1eaaad840f",
+                    "leftValue": "={{ $json.properties.Type.select.name }}",
+                    "rightValue": "Podcast",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Podcast"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c7894b70-874f-42a4-97a8-ffa73801768b",
+      "name": "Route by Type (Weekly)",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        1940,
+        390
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 30,
+        "filters": {
+          "q": "={{ 'label:' + $json.properties.Source.rich_text[0].plain_text + ' newer_than:7d' }}"
+        },
+        "options": {
+          "format": "simple"
+        }
+      },
+      "id": "e9721d68-8f32-4841-b66a-9f894f921751",
+      "name": "Fetch W-Newsletters",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2200,
+        200
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_GMAIL_CRED_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.properties.Source.rich_text[0].plain_text }}"
+      },
+      "id": "0f0aa765-9758-490f-9c15-31328af9f8d4",
+      "name": "Fetch W-News RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        2200,
+        390
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.properties.Source.rich_text[0].plain_text }}"
+      },
+      "id": "a83858bc-b971-4395-a23e-7954652f1c03",
+      "name": "Fetch W-Podcast RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        2200,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "_type",
+              "value": "Newsletter"
+            }
+          ]
+        },
+        "options": {
+          "keepAllFields": true
+        }
+      },
+      "id": "7226baa5-59fc-4ebb-9ebe-91afcb59924d",
+      "name": "Tag W-Newsletter",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        2440,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "_type",
+              "value": "News"
+            }
+          ]
+        },
+        "options": {
+          "keepAllFields": true
+        }
+      },
+      "id": "b254055c-536c-4ad6-94a2-24cd18aa8a5c",
+      "name": "Tag W-News",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        2440,
+        390
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "_type",
+              "value": "Podcast"
+            }
+          ]
+        },
+        "options": {
+          "keepAllFields": true
+        }
+      },
+      "id": "462af1d0-39ae-4952-b770-cee6f0c932c3",
+      "name": "Tag W-Podcast",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        2440,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "append"
+      },
+      "id": "222f4606-ed8d-4c6c-9caa-d5dc6cb16259",
+      "name": "Merge Weekly Sources",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        2680,
+        390
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const allItems = $input.all();\nconst seen = new Set();\nconst normalised = [];\n\nfor (const item of allItems) {\n  const d = item.json;\n  let source_type = d._type || '';\n  let source_name = '';\n  let title = '';\n  let snippet = '';\n\n  if (d.subject !== undefined) {\n    source_type = source_type || 'Newsletter';\n    source_name = String(d.from || 'Newsletter').replace(/<[^>]*>/g, '').trim();\n    title = String(d.subject || '(no subject)');\n    snippet = String(d.text || d.snippet || '').replace(/\\s+/g, ' ').trim().substring(0, 600);\n  } else if (d.title !== undefined && (d.link !== undefined || d.guid !== undefined)) {\n    source_type = source_type || 'News';\n    source_name = String(d.creator || d.author || d['dc:creator'] || 'RSS');\n    title = String(d.title || '');\n    snippet = String(d.contentSnippet || d.content || d.description || '')\n      .replace(/<[^>]*>/g, '').replace(/\\s+/g, ' ').trim().substring(0, 400);\n  } else {\n    source_type = 'Unknown';\n    source_name = 'Unknown';\n    title = JSON.stringify(d).substring(0, 80);\n  }\n\n  const key = title.toLowerCase().trim();\n  if (key && !seen.has(key)) {\n    seen.add(key);\n    normalised.push({ source_type, source_name, title, snippet });\n  }\n}\n\nconst weekly_items_text = normalised\n  .map(i => '[' + i.source_type + '] ' + i.source_name + '\\n' + i.title + '\\n' + i.snippet)\n  .join('\\n\\n---\\n\\n');\n\nreturn [{ json: { weekly_items: normalised, weekly_item_count: normalised.length, weekly_items_text } }];"
+      },
+      "id": "81048fae-fd95-4a68-8200-77c56dcae7e5",
+      "name": "Normalise Weekly Sources",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2920,
+        390
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst weekly_items_text   = d.weekly_items_text   || '';\nconst weekly_item_count   = d.weekly_item_count   || 0;\n\nlet all_briefs_text = '';\nlet brief_count = 0;\ntry {\n  const agg = $('Aggregate All Briefs').first().json;\n  all_briefs_text = agg.all_briefs_text || '';\n  brief_count     = agg.brief_count     || 0;\n} catch(e) {\n  all_briefs_text = '(No daily briefs available this week)';\n}\n\nconst has_content = brief_count > 0 || weekly_item_count > 0;\n\nconst prompt =\n  'You are a personal knowledge curator reviewing a full week of content.\\n\\n'\n  + 'Inputs below:\\n'\n  + '1. Daily briefs from this week\\n'\n  + '2. Weekly-cadence sources published this week\\n\\n'\n  + 'Produce a Weekly Synthesis in exactly this structure:\\n\\n'\n  + '## The Week\\'s Signal\\n'\n  + 'The single most important theme or development this week. 2-3 sentences.\\n\\n'\n  + '## Three Things That Mattered\\n'\n  + 'The 3 developments with the most lasting relevance.\\n'\n  + 'For each: **What happened** \\u2014 Why it matters beyond this week.\\n\\n'\n  + '## Patterns Worth Noting\\n'\n  + 'Any signal that appeared across multiple days or sources.\\n'\n  + 'What does the repetition suggest?\\n\\n'\n  + '## Carry Into Next Week\\n'\n  + '2-3 things to keep in mind or follow up on.\\n\\n'\n  + '## What You Can Let Go\\n'\n  + 'Noise that dominated coverage this week but won\\'t matter in a month.\\n\\n'\n  + '---\\n'\n  + 'DAILY BRIEFS THIS WEEK:\\n'\n  + (all_briefs_text || '(No daily briefs this week)')\n  + '\\n\\nWEEKLY SOURCES:\\n'\n  + (weekly_items_text || '(No weekly sources this week)')\n  + '\\n\\nBe direct. Prioritise signal over summary.';\n\nreturn [{ json: { prompt, has_content, brief_count, weekly_item_count } }];"
+      },
+      "id": "2d822d8b-7eca-4f6c-adf3-cee326412394",
+      "name": "Build Synthesis Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3160,
+        390
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "ee611322-eb06-426f-9e61-b1b746d7745b",
+              "leftValue": "={{ ($json.brief_count || 0) + ($json.weekly_item_count || 0) }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          }
+        }
+      },
+      "id": "0a3a6d65-c74a-4e72-b0b2-d7a324bf1d94",
+      "name": "Guard: Has Content?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3400,
+        390
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "provider",
+              "value": "={{ ($env.AI_PROVIDER || 'gemini').toLowerCase() }}"
+            }
+          ]
+        },
+        "options": {
+          "keepAllFields": true
+        }
+      },
+      "id": "96d51a16-28c4-48b6-a97d-af5a564447f1",
+      "name": "AI Provider Config (W)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        3640,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "id": "260969a0-341f-4b13-a8a0-ee9e726ecadb",
+                    "leftValue": "={{ $json.provider }}",
+                    "rightValue": "gemini",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Gemini"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "id": "2cf36851-c7b3-4f3a-a815-b0dc9560ba16",
+                    "leftValue": "={{ $json.provider }}",
+                    "rightValue": "ollama",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Ollama"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fbaf3fe3-7bbb-4f19-9635-a9a62dacd580",
+      "name": "Route to AI (W)",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        3880,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + $env.GEMINI_API_KEY }}",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { contents:[{ parts:[{ text: $json.prompt }] }], generationConfig:{ maxOutputTokens:2000, temperature:0.3 } } }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 45000,
+          "onError": "continueErrorOutput"
+        }
+      },
+      "id": "80627f3f-bae2-423a-9acb-58b275b78135",
+      "name": "Call Gemini (W)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4120,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.OLLAMA_HOST + '/api/chat' }}",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: $env.OLLAMA_MODEL, messages:[{ role:\"user\", content: $json.prompt }], stream: false } }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 45000
+        }
+      },
+      "id": "65cb589e-3e22-4d05-b5a9-cdd69ab2ec42",
+      "name": "Call Ollama (W)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4120,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nconst d = items[0].json;\nlet ai_text = '';\nlet provider_used = 'Unknown';\n\nif (d.candidates && Array.isArray(d.candidates) && d.candidates[0]) {\n  const parts = d.candidates[0]?.content?.parts || [];\n  ai_text = parts.map(p => p.text || '').join('');\n  provider_used = 'Gemini';\n} else if (d.message && d.message.content !== undefined) {\n  ai_text = d.message.content;\n  provider_used = 'Ollama';\n} else if (d.response !== undefined) {\n  ai_text = d.response;\n  provider_used = 'Ollama';\n} else if (d.ai_text !== undefined) {\n  ai_text = d.ai_text;\n  provider_used = d.provider_used || 'Unknown';\n}\n\nconst item_count = $input.first().json.item_count ?? 0;\n\nreturn [{ json: { ai_text, provider_used, item_count } }];"
+      },
+      "id": "427f7ef9-5f39-4544-8dda-77fa6ee9946c",
+      "name": "Normalise AI Response (W)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4360,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const { ai_text, provider_used, item_count } = $input.first().json;\nconst blocks = [];\n\nfor (const line of (ai_text || '').split('\\n')) {\n  const t = line.trim();\n  if (!t) continue;\n  if (t.startsWith('## ')) {\n    blocks.push({ object: 'block', type: 'heading_2',\n      heading_2: { rich_text: [{ type: 'text', text: { content: t.slice(3) } }], color: 'default' } });\n  } else if (t.startsWith('### ')) {\n    blocks.push({ object: 'block', type: 'heading_3',\n      heading_3: { rich_text: [{ type: 'text', text: { content: t.slice(4) } }], color: 'default' } });\n  } else if (t.startsWith('- ') || t.startsWith('* ')) {\n    blocks.push({ object: 'block', type: 'bulleted_list_item',\n      bulleted_list_item: { rich_text: [{ type: 'text', text: { content: t.slice(2) } }], color: 'default' } });\n  } else {\n    blocks.push({ object: 'block', type: 'paragraph',\n      paragraph: { rich_text: [{ type: 'text', text: { content: t } }], color: 'default' } });\n  }\n}\n\nreturn [{ json: { ai_text, provider_used, item_count, blocks: blocks.slice(0, 95) } }];"
+      },
+      "id": "26280804-13e4-46e5-b535-e033122b7b92",
+      "name": "Build Notion Blocks (W)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4600,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "create",
+        "databaseId": {
+          "__rl": true,
+          "value": "={{ $env.WEEKLY_SYNTHESIS_DB_ID }}",
+          "mode": "id"
+        },
+        "title": "={{ 'Week of ' + DateTime.now().startOf('week').toFormat('yyyy-MM-dd') }}",
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "AI Provider Used|select",
+              "selectValue": "={{ $json.provider_used }}"
+            },
+            {
+              "key": "Daily Briefs Read|number",
+              "numberValue": "={{ $json.brief_count ?? 0 }}"
+            },
+            {
+              "key": "Weekly Sources|number",
+              "numberValue": "={{ $json.weekly_item_count ?? 0 }}"
+            },
+            {
+              "key": "Generated At|date",
+              "dateValue": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e1de69b7-6e07-4543-959f-26cfd64a0c65",
+      "name": "Create Synthesis Page",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [
+        4840,
+        260
+      ],
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_NOTION_CRED_ID",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ 'https://api.notion.com/v1/blocks/' + $json.id + '/children' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "notionApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2022-06-28"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { children: $('Build Notion Blocks (W)').first().json.blocks } }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "61a19e68-2e66-4606-8d8c-7378771e81fc",
+      "name": "Append Synthesis Content",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5080,
+        260
+      ],
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_NOTION_CRED_ID",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "create",
+        "databaseId": {
+          "__rl": true,
+          "value": "={{ $env.WEEKLY_SYNTHESIS_DB_ID }}",
+          "mode": "id"
+        },
+        "title": "={{ 'Week of ' + DateTime.now().startOf('week').toFormat('yyyy-MM-dd') }}",
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Daily Briefs Read|number",
+              "numberValue": 0
+            },
+            {
+              "key": "Weekly Sources|number",
+              "numberValue": 0
+            },
+            {
+              "key": "Generated At|date",
+              "dateValue": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "22421205-0d64-4767-a786-a775d1c7f8b3",
+      "name": "Create Nothing This Week",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [
+        3640,
+        540
+      ],
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_NOTION_CRED_ID",
+          "name": "Notion account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger (Weekly)": {
+      "main": [
+        [
+          {
+            "node": "Read Daily Briefs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Trigger (Weekly)": {
+      "main": [
+        [
+          {
+            "node": "Read Daily Briefs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Daily Briefs": {
+      "main": [
+        [
+          {
+            "node": "Tag Brief Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag Brief Page": {
+      "main": [
+        [
+          {
+            "node": "Get Block Children",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Block Children": {
+      "main": [
+        [
+          {
+            "node": "Extract Brief Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Brief Text": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Briefs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate All Briefs": {
+      "main": [
+        [
+          {
+            "node": "Read Weekly Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Weekly Sources": {
+      "main": [
+        [
+          {
+            "node": "Route by Type (Weekly)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Type (Weekly)": {
+      "main": [
+        [
+          {
+            "node": "Fetch W-Newsletters",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch W-News RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch W-Podcast RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch W-Newsletters": {
+      "main": [
+        [
+          {
+            "node": "Tag W-Newsletter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch W-News RSS": {
+      "main": [
+        [
+          {
+            "node": "Tag W-News",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch W-Podcast RSS": {
+      "main": [
+        [
+          {
+            "node": "Tag W-Podcast",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag W-Newsletter": {
+      "main": [
+        [
+          {
+            "node": "Merge Weekly Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag W-News": {
+      "main": [
+        [
+          {
+            "node": "Merge Weekly Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag W-Podcast": {
+      "main": [
+        [
+          {
+            "node": "Merge Weekly Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Weekly Sources": {
+      "main": [
+        [
+          {
+            "node": "Normalise Weekly Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise Weekly Sources": {
+      "main": [
+        [
+          {
+            "node": "Build Synthesis Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Synthesis Prompt": {
+      "main": [
+        [
+          {
+            "node": "Guard: Has Content?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard: Has Content?": {
+      "main": [
+        [
+          {
+            "node": "AI Provider Config (W)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Nothing This Week",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Provider Config (W)": {
+      "main": [
+        [
+          {
+            "node": "Route to AI (W)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route to AI (W)": {
+      "main": [
+        [
+          {
+            "node": "Call Gemini (W)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Ollama (W)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Gemini (W)": {
+      "main": [
+        [
+          {
+            "node": "Normalise AI Response (W)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Ollama (W)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Ollama (W)": {
+      "main": [
+        [
+          {
+            "node": "Normalise AI Response (W)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise AI Response (W)": {
+      "main": [
+        [
+          {
+            "node": "Build Notion Blocks (W)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Notion Blocks (W)": {
+      "main": [
+        [
+          {
+            "node": "Create Synthesis Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Synthesis Page": {
+      "main": [
+        [
+          {
+            "node": "Append Synthesis Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "fd0652df-467c-4793-a43e-6fb228fa53c4",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "intelligence-system-weekly"
+  }
+}

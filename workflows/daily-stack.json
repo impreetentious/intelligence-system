@@ -1,0 +1,883 @@
+{
+  "name": "Daily Brief — Intelligence System",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * *"
+            }
+          ]
+        }
+      },
+      "id": "331ae23e-c777-4e13-8352-7aa935259e28",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "daily-brief",
+        "responseMode": "onReceived",
+        "responseData": "allEntries",
+        "options": {}
+      },
+      "id": "1d503009-f96c-47e9-9941-6ede774e4508",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        220,
+        480
+      ],
+      "webhookId": "daily-brief"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": {
+          "__rl": true,
+          "value": "={{ $env.SOURCES_DB_ID }}",
+          "mode": "id"
+        },
+        "returnAll": true,
+        "filterType": "expression",
+        "filterJson": "={{ JSON.stringify({and:[{property:\"Active\",checkbox:{equals:true}},{property:\"Cadence\",select:{equals:\"Daily\"}}]}) }}",
+        "options": {}
+      },
+      "id": "67ec4289-e03c-4015-9e64-212d3094c7d0",
+      "name": "Read Sources DB",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [
+        480,
+        390
+      ],
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_NOTION_CRED_ID",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "id": "55e3a7af-c8ab-49be-aa6b-c8d2de33add4",
+                    "leftValue": "={{ $json.properties.Type.select.name }}",
+                    "rightValue": "Newsletter",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Newsletter"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "id": "8789d21b-d0f5-4dcf-bdef-f04861357f05",
+                    "leftValue": "={{ $json.properties.Type.select.name }}",
+                    "rightValue": "News",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "News"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "id": "a8d9eeac-c35e-466a-a344-91c9b117d3ad",
+                    "leftValue": "={{ $json.properties.Type.select.name }}",
+                    "rightValue": "Podcast",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Podcast"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "28339cfe-2717-4572-af3c-cebe96b7e665",
+      "name": "Route by Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        740,
+        390
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 30,
+        "filters": {
+          "q": "={{ 'label:' + $json.properties.Source.rich_text[0].plain_text + ' is:unread newer_than:1d' }}"
+        },
+        "options": {
+          "format": "simple"
+        }
+      },
+      "id": "bad33b8d-6edf-4585-aede-6e8a5b3562c2",
+      "name": "Fetch Newsletters",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1000,
+        200
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_GMAIL_CRED_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.properties.Source.rich_text[0].plain_text }}"
+      },
+      "id": "9d0a2dcd-9404-463e-b89e-fea22c1e93e8",
+      "name": "Fetch News RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        390
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.properties.Source.rich_text[0].plain_text }}"
+      },
+      "id": "b1c5205f-ca35-4c07-b024-d5ffb25b206c",
+      "name": "Fetch Podcast RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "_type",
+              "value": "Newsletter"
+            }
+          ]
+        },
+        "options": {
+          "keepAllFields": true
+        }
+      },
+      "id": "a515fb78-7265-4906-8a6c-9ffbeec17b2b",
+      "name": "Tag Newsletter",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "_type",
+              "value": "News"
+            }
+          ]
+        },
+        "options": {
+          "keepAllFields": true
+        }
+      },
+      "id": "76cca926-753a-423a-bfc7-5bf180b0c37f",
+      "name": "Tag News",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        390
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "_type",
+              "value": "Podcast"
+            }
+          ]
+        },
+        "options": {
+          "keepAllFields": true
+        }
+      },
+      "id": "74e1fae1-f823-4977-9486-3a8d06a8c0b2",
+      "name": "Tag Podcast",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "append"
+      },
+      "id": "b27ac76f-479d-4446-a756-7ffe96eb2e40",
+      "name": "Merge All Sources",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1480,
+        390
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "76465ad6-0bb0-45c4-8378-328497f601ac",
+              "leftValue": "={{ $input.all().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          }
+        }
+      },
+      "id": "f84b5cd1-c8f6-4f85-a636-d006f7c11567",
+      "name": "Guard: Has Items?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1700,
+        390
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const allItems = $input.all();\nconst seen = new Set();\nconst normalised = [];\n\nfor (const item of allItems) {\n  const d = item.json;\n  let source_type = d._type || '';\n  let source_name = '';\n  let title = '';\n  let snippet = '';\n\n  if (d.subject !== undefined) {\n    // Gmail message\n    source_type = source_type || 'Newsletter';\n    source_name = String(d.from || 'Newsletter').replace(/<[^>]*>/g, '').trim();\n    title = String(d.subject || '(no subject)');\n    snippet = String(d.text || d.snippet || '').replace(/\\s+/g, ' ').trim().substring(0, 600);\n  } else if (d.title !== undefined && (d.link !== undefined || d.guid !== undefined)) {\n    // RSS / Atom item\n    source_type = source_type || 'News';\n    source_name = String(d.creator || d.author || d['dc:creator'] || 'RSS');\n    title = String(d.title || '');\n    snippet = String(d.contentSnippet || d.content || d.description || '')\n      .replace(/<[^>]*>/g, '').replace(/\\s+/g, ' ').trim().substring(0, 400);\n  } else {\n    source_type = 'Unknown';\n    source_name = 'Unknown';\n    title = JSON.stringify(d).substring(0, 80);\n  }\n\n  const key = title.toLowerCase().trim();\n  if (key && !seen.has(key)) {\n    seen.add(key);\n    normalised.push({ source_type, source_name, title, snippet });\n  }\n}\n\nconst content = normalised\n  .map(i => '[' + i.source_type + '] ' + i.source_name + '\\nHeadline: ' + i.title + '\\n' + i.snippet)\n  .join('\\n\\n---\\n\\n');\n\nconst prompt =\n  'You are a personal knowledge curator. Below are today\\'s newsletters, news items, and podcast episodes.\\n\\n'\n  + 'Produce a Morning Brief in exactly this structure:\\n\\n'\n  + '## Today in Brief\\n'\n  + '2-3 sentence overview of the single most important signal today.\\n\\n'\n  + '## Key Insights\\n'\n  + 'Top 5 insights across all sources. For each:\\n'\n  + '**[Source]** \\u2014 Insight in one sentence. Why it matters in one sentence.\\n\\n'\n  + '## Follow Up On\\n'\n  + 'Actionable items only. Skip this section entirely if none.\\n\\n'\n  + '## Safe to Skip Today\\n'\n  + 'Sources that published nothing meaningfully new. One line each.\\n\\n'\n  + '---\\nCONTENT:\\n'\n  + content\n  + '\\n\\nBe direct. No filler. Prioritise signal over coverage.';\n\nreturn [{ json: { prompt, item_count: normalised.length } }];"
+      },
+      "id": "0404f2d2-c4b8-4392-be46-ab30cd521676",
+      "name": "Normalise + Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1940,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "provider",
+              "value": "={{ ($env.AI_PROVIDER || 'gemini').toLowerCase() }}"
+            }
+          ]
+        },
+        "options": {
+          "keepAllFields": true
+        }
+      },
+      "id": "20a1323d-7cae-4686-afc9-dbaa7064f799",
+      "name": "AI Provider Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        2180,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "id": "a3dd1277-26c7-48bb-9d93-e4220d7a708c",
+                    "leftValue": "={{ $json.provider }}",
+                    "rightValue": "gemini",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Gemini"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "id": "4020aa26-6d06-42f3-818b-388352165eeb",
+                    "leftValue": "={{ $json.provider }}",
+                    "rightValue": "ollama",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Ollama"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4533e3e5-6257-45be-9daa-1564a6285e15",
+      "name": "Route to AI",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        2420,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + $env.GEMINI_API_KEY }}",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { contents:[{ parts:[{ text: $json.prompt }] }], generationConfig:{ maxOutputTokens:1500, temperature:0.3 } } }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 45000,
+          "onError": "continueErrorOutput"
+        }
+      },
+      "id": "5d47b9b6-0565-498a-a0ca-dccd616eec89",
+      "name": "Call Gemini",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2660,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.OLLAMA_HOST + '/api/chat' }}",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: $env.OLLAMA_MODEL, messages:[{ role:\"user\", content: $json.prompt }], stream: false } }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 45000
+        }
+      },
+      "id": "e50b8616-26da-400d-98b3-3aa51746e642",
+      "name": "Call Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2660,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nconst d = items[0].json;\nlet ai_text = '';\nlet provider_used = 'Unknown';\n\nif (d.candidates && Array.isArray(d.candidates) && d.candidates[0]) {\n  const parts = d.candidates[0]?.content?.parts || [];\n  ai_text = parts.map(p => p.text || '').join('');\n  provider_used = 'Gemini';\n} else if (d.message && d.message.content !== undefined) {\n  ai_text = d.message.content;\n  provider_used = 'Ollama';\n} else if (d.response !== undefined) {\n  ai_text = d.response;\n  provider_used = 'Ollama';\n} else if (d.ai_text !== undefined) {\n  ai_text = d.ai_text;\n  provider_used = d.provider_used || 'Unknown';\n}\n\nconst item_count = $input.first().json.item_count ?? 0;\n\nreturn [{ json: { ai_text, provider_used, item_count } }];"
+      },
+      "id": "cf84fd1e-5d58-48cd-99db-2161e6d42c40",
+      "name": "Normalise AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2900,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const { ai_text, provider_used, item_count } = $input.first().json;\nconst blocks = [];\n\nfor (const line of (ai_text || '').split('\\n')) {\n  const t = line.trim();\n  if (!t) continue;\n  if (t.startsWith('## ')) {\n    blocks.push({ object: 'block', type: 'heading_2',\n      heading_2: { rich_text: [{ type: 'text', text: { content: t.slice(3) } }], color: 'default' } });\n  } else if (t.startsWith('### ')) {\n    blocks.push({ object: 'block', type: 'heading_3',\n      heading_3: { rich_text: [{ type: 'text', text: { content: t.slice(4) } }], color: 'default' } });\n  } else if (t.startsWith('- ') || t.startsWith('* ')) {\n    blocks.push({ object: 'block', type: 'bulleted_list_item',\n      bulleted_list_item: { rich_text: [{ type: 'text', text: { content: t.slice(2) } }], color: 'default' } });\n  } else {\n    blocks.push({ object: 'block', type: 'paragraph',\n      paragraph: { rich_text: [{ type: 'text', text: { content: t } }], color: 'default' } });\n  }\n}\n\nreturn [{ json: { ai_text, provider_used, item_count, blocks: blocks.slice(0, 95) } }];"
+      },
+      "id": "37e67f2e-a25e-4f44-b757-f8a089f6c879",
+      "name": "Build Notion Blocks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3140,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "create",
+        "databaseId": {
+          "__rl": true,
+          "value": "={{ $env.DAILY_BRIEFS_DB_ID }}",
+          "mode": "id"
+        },
+        "title": "={{ $now.toFormat('yyyy-MM-dd') }}",
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Status|select",
+              "selectValue": "Generated"
+            },
+            {
+              "key": "AI Provider Used|select",
+              "selectValue": "={{ $json.provider_used }}"
+            },
+            {
+              "key": "Sources Processed|number",
+              "numberValue": "={{ $json.item_count }}"
+            },
+            {
+              "key": "Generated At|date",
+              "dateValue": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0e251f05-5aa6-499f-8f9a-4664a72890c4",
+      "name": "Create Brief Page",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [
+        3380,
+        240
+      ],
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_NOTION_CRED_ID",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ 'https://api.notion.com/v1/blocks/' + $json.id + '/children' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "notionApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2022-06-28"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { children: $('Build Notion Blocks').first().json.blocks } }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "bc1b6a57-2f56-4e7a-a337-1cada46b8691",
+      "name": "Append Brief Content",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3620,
+        240
+      ],
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_NOTION_CRED_ID",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "create",
+        "databaseId": {
+          "__rl": true,
+          "value": "={{ $env.DAILY_BRIEFS_DB_ID }}",
+          "mode": "id"
+        },
+        "title": "={{ $now.toFormat('yyyy-MM-dd') }}",
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Status|select",
+              "selectValue": "Nothing Today"
+            },
+            {
+              "key": "Sources Processed|number",
+              "numberValue": 0
+            },
+            {
+              "key": "Generated At|date",
+              "dateValue": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "003ffd83-f6c7-409c-ac9c-442a88c71331",
+      "name": "Create Nothing Today",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [
+        1940,
+        560
+      ],
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_NOTION_CRED_ID",
+          "name": "Notion account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Sources DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Sources DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Sources DB": {
+      "main": [
+        [
+          {
+            "node": "Route by Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Type": {
+      "main": [
+        [
+          {
+            "node": "Fetch Newsletters",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch News RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Podcast RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Newsletters": {
+      "main": [
+        [
+          {
+            "node": "Tag Newsletter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch News RSS": {
+      "main": [
+        [
+          {
+            "node": "Tag News",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Podcast RSS": {
+      "main": [
+        [
+          {
+            "node": "Tag Podcast",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag Newsletter": {
+      "main": [
+        [
+          {
+            "node": "Merge All Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag News": {
+      "main": [
+        [
+          {
+            "node": "Merge All Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag Podcast": {
+      "main": [
+        [
+          {
+            "node": "Merge All Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge All Sources": {
+      "main": [
+        [
+          {
+            "node": "Guard: Has Items?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard: Has Items?": {
+      "main": [
+        [
+          {
+            "node": "Normalise + Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Nothing Today",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise + Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "AI Provider Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Provider Config": {
+      "main": [
+        [
+          {
+            "node": "Route to AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route to AI": {
+      "main": [
+        [
+          {
+            "node": "Call Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Gemini": {
+      "main": [
+        [
+          {
+            "node": "Normalise AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Ollama": {
+      "main": [
+        [
+          {
+            "node": "Normalise AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise AI Response": {
+      "main": [
+        [
+          {
+            "node": "Build Notion Blocks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Notion Blocks": {
+      "main": [
+        [
+          {
+            "node": "Create Brief Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Brief Page": {
+      "main": [
+        [
+          {
+            "node": "Append Brief Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "de9ca4b2-79b5-455c-bafd-e7f9db7bb941",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "intelligence-system-daily"
+  }
+}
