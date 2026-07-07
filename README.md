@@ -13,7 +13,7 @@ Two n8n workflows that pull newsletters, news RSS and podcast show notes into st
 | Layer | Tool | Cost |
 |---|---|---|
 | Automation | n8n (local, Mac + Windows) | Free |
-| AI — Primary | Google Gemini 1.5 Flash | Free tier |
+| AI — Primary | Google Gemini 2.5 Flash | Free tier |
 | AI — Fallback | Ollama (local) | Free |
 | Output | Notion | Free |
 | Email | Gmail | Free |
@@ -80,4 +80,4 @@ MIT © Sidakpreet Singh — see [LICENSE](LICENSE).
 
 ---
 
-**Version:** v1.0.0
+**Version:** v1.0.1
